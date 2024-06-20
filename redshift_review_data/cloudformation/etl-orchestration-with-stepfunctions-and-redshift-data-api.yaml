@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "CloudFormation Template to deploy an ETL orchestration pipeline by using Redshift Data Api, Step Function and AWS Lambda"
+Parameters:
+  RedshiftClusterEndpoint:
+    Description: Redshift cluster endpoint including port number and database name
+    Type: String
+    Default: redshift-cluster.xxxxxx.region.redshift.amazonaws.com:5439/dev
+  DbUsername:
+    Description: Redshift database user name which has access to run SQL Script.
+    Type: String
+    AllowedPattern: "([a-z])([a-z]|[0-9])*"
+    Default: 'awsuser'
+  ETLScriptS3Path:
+    Description: S3 bucket name (and folder if needed) to store review SQL script files. Please note, this automation would grant full access on your SQL script files' S3 bucket.
+    Type: String
+    Default: 'YourS3BucketName'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Input Parameters
+        Parameters:
+          - RedshiftClusterEndpoint
+          - DbUsername
+          - ETLScriptS3Path
+Mappings:          
+  Script: # static values related to the scripts. 
+    Config:
+      NodeDetails: 'rpr_NodeDetails.sql'
+      QueueHealth: 'rpr_QueueHealth.sql' 
+Resources:
+  StateMachineExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Description : IAM Role for the state machine in step function to run
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub 'states.${AWS::Region}.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: RedshiftBatchDataApiPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'redshift-data:BatchExecuteStatement'
+                  - 'redshift-data:ListStatements'
+                  - 'redshift-data:GetStatementResult'
+                  - 'redshift-data:DescribeStatement'
+                  - 'redshift-data:ExecuteStatement'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'redshift:GetClusterCredentials'
+                Resource:
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:cluster:${SourceRedshiftClusterIdentifier}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]]}
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:dbname:${SourceRedshiftClusterIdentifier}/${RedshiftDatabaseName}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]],RedshiftDatabaseName: !Select [1, !Split ["/", !Ref RedshiftClusterEndpoint]]}   
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:dbuser:${SourceRedshiftClusterIdentifier}/${DbUsername}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]]}
+        - PolicyName: ScriptS3AccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetBucketLocation'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource: 
+                  - !Sub
+                      - arn:aws:s3:::${ETLScriptS3Bucket}/*
+                      - {ETLScriptS3Bucket: !Select [0, !Split ["/", !Ref ETLScriptS3Path]]}
+                  - !Sub
+                      - arn:aws:s3:::${ETLScriptS3Bucket}
+                      - {ETLScriptS3Bucket: !Select [0, !Split ["/", !Ref ETLScriptS3Path]]}
+
+  RedshiftReviewStepFunction:
+    Type: 'AWS::StepFunctions::StateMachine'
+    Properties:
+      DefinitionString: !Sub 
+        - |-   
+          {
+            "Comment": "A simple ETL workflow for loading dimension and fact tables",
+          
+          }
+        - RedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]]
+          RedshiftDbName: !Select [1, !Split ["/", !Ref RedshiftClusterEndpoint]]
+          RedshiftDbUser: !Ref DbUsername
+          S3BucketName: !Ref ETLScriptS3Path
+          SetupScriptFilename: !FindInMap [Script, Config, SetupScript]
+          ValidateScriptFilename: !FindInMap [Script, Config, ValidateScript]       
+      RoleArn: !GetAtt StateMachineExecutionRole.Arn
+
+  LambdaInvokeStepFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "LambdaInvokeStepFunctionRole-${AWS::AccountId}"
+      Description: IAM Role for lambda to execute the Step Function
+      AssumeRolePolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            -
+              Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+      Path: /
+      Policies:
+          -
+            PolicyName: LambdaInvokePolicy
+            PolicyDocument :
+              Version: 2012-10-17
+              Statement:
+                -
+                  Effect: "Allow"
+                  Action:
+                    - states:StartExecution
+                  Resource: !Ref RedshiftETLStepFunction
+          -
+            PolicyName: LambdaCloudFormationPolicy
+            PolicyDocument:
+              Version: 2012-10-17
+              Statement:
+                -
+                  Effect: Allow
+                  Action:
+                    - s3:*
+                  Resource:
+                    - !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}"
+                    - !Sub "arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}"
+                    - !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}/*"
+                    - !Sub "arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}/*"
+
+  LambdaInvokeStepFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "LambdaInvokeStepFunction-${AWS::AccountId}"
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Runtime: python3.8
+      Role: !GetAtt 'LambdaInvokeStepFunctionRole.Arn'
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import traceback
+          import json
+          import cfnresponse
+          def handler(event, context):
+            print(event)
+            step_function_client = boto3.client('stepfunctions')
+            res = {}
+            if event['RequestType'] != 'Delete':
+                try:
+                    step_function_input = {"comment": "Execute ETL Workflow for Redshift"}
+                    response = step_function_client.start_execution(stateMachineArn=event['ResourceProperties'].get('StepFunctionArn'),
+                                                                    input=json.dumps(step_function_input)
+                                                                   )
+                    print(response)
+                except:
+                    print(traceback.format_exc())
+                    cfnresponse.send(event, context, cfnresponse.FAILED, input)
+                    raise
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, res)
+
+  StartStepFunction:
+    Type: Custom::LambdaStartStepFunction
+    Properties:
+      ServiceToken: !GetAtt [LambdaInvokeStepFunction, Arn]
+      StepFunctionArn: !Ref RedshiftETLStepFunction
+Outputs:
+  RedshiftETLStepFunctionArn:
+    Description: "The ARN of the step function used for ETL orchestration"
+    Value:
+      Ref: RedshiftETLStepFunction

@@ -1,0 +1,285 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nested Stack for S3 buckets
+
+Mappings:
+  Script:
+    Config:
+      NodeDetails: 'rpr_NodeDetails.sql'
+      QueueHealth: 'rpr_QueueHealth.sql'
+      AlterTableRecommendation: 'rpr_AlterTableRecommendation.sql'
+      SpectrumPerformance: 'rpr_SpectrumPerformance.sql'
+      ATOWorkerActions: 'rpr_ATOWorkerActions.sql'
+      ConcurrencyScalingUsage: 'rpr_ConcurrencyScalingUsage.sql'
+      CopyPerformance: 'rpr_CopyPerformance.sql'
+      DataShareConsumerUsage: 'rpr_DataShareConsumerUsage.sql'
+      DataShareProducerObject: 'rpr_DataShareProducerObject.sql'
+      MaterializedView: 'rpr_MaterializedView.sql'
+      TableAlerts: 'rpr_TableAlerts.sql'
+      Tablelnfo: 'rpr_Tablelnfo.sql'
+      Top50QueriesByDiskSpill: 'rpr_Top50QueriesByDiskSpill.sql'
+      Top50QueriesByRunTime: 'rpr_Top50QueriesByRunTime.sql'
+      UsagePattern: 'rpr_UsagePattern.sql'
+      WLMandCommit: 'rpr_WLMandCommit.sql'
+      WLMConfig: 'rpr_WLMConfig.sql'
+      WorkloadEvaluation: 'rpr_WorkloadEvaluation.sql'
+
+Parameters:
+  S3BucketNameGlobal:
+    Type: String
+    Description: Name of the S3 bucket to store the SQL scripts
+    Default: 'response-logger-266726630905-us-west-2'
+  S3BucketNameLocal:
+    Type: String
+    Description: Name of the S3 bucket to store the SQL scripts
+  ScriptPath:
+    Type: String
+    Description: Path to the SQL script files in the S3 bucket
+    Default: 'scripts'
+  ResultPath:
+    Type: String
+    Description: Path to store the results of the Review
+    Default: 'results'
+  ErrorPath:
+    Type: String
+    Description: Path to store the results of the Review
+    Default: 'error'
+
+Resources:
+  S3BucketLocal:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Ref S3BucketNameLocal
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    Metadata:
+      Comment: Bucket to store the SQL scripts
+:
+  PowertoolsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: aws-lambda-powertools-python-layer
+      ContentUri: arn:aws:serverlessrepo:eu-west-1:057560766410:applications/aws-lambda-powertools-python-layer
+      CompatibleRuntimes:
+        - python3.7
+        - python3.8
+        - python3.9
+        - python3.10
+
+  LambdaCopyScriptsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "LambdaCopyScriptsRole-${AWS::AccountId}"
+      Description: IAM Role for lambda to copy scripts 
+      AssumeRolePolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            -
+              Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaBasicExecutionRole
+      Policies:
+          -
+            PolicyName: LambdaCloudFormationPolicy
+            PolicyDocument:
+              Version: 2012-10-17
+              Statement:
+                -
+                  Effect: Allow
+                  Action:
+                    - s3:*
+                  Resource:
+                    - !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}"
+                    - !Sub "arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}"
+                    - !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}/*"
+                    - !Sub "arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}/*" 
+
+
+  LambdaCopyScriptsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "LambdaCopyScriptsFunction-${AWS::AccountId}"
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Runtime: python3.10
+      Layers:
+        - !Ref PowertoolsLayer
+      Role: !GetAtt 'LambdaCopyScriptsFunction.Arn'
+      Timeout: 600
+      Environment:
+        Variables:
+          SOURCE_BUCKET: !Ref S3BucketNameLocal
+          SOURCE_PREFIX: !Ref ScriptPath
+          DESTINATION_BUCKET: !Ref S3BucketNameGlobal
+          DESTINATION_PREFIX: !Ref ScriptPath
+      Code:
+        ZipFile: |
+          COPY THE CODE HERE
+
+  LambdaInvokeStepFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "LambdaInvokeStepFunctionRole-${AWS::AccountId}"
+      Description: IAM Role for lambda to execute the Step Function
+      AssumeRolePolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            -
+              Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+      Path: /
+      Layers:
+        - !Ref PowertoolsLayer      # add managed policy to access the Step Function
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess
+
+      Policies:
+          -
+            PolicyName: LambdaInvokePolicy
+            PolicyDocument :
+              Version: 2012-10-17
+              Statement:
+                -
+                  Effect: "Allow"
+                  Action:
+                    - states:StartExecution
+                  Resource: !Ref RedshiftETLStepFunction
+          -
+            PolicyName: LambdaCloudFormationPolicy
+            PolicyDocument:
+              Version: 2012-10-17
+              Statement:
+                -
+                  Effect: Allow
+                  Action:
+                    - s3:*
+                  Resource:
+                    - !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}"
+                    - !Sub "arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}"
+                    - !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}/*"
+                    - !Sub "arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}/*"
+# add managed policy to access the Step Function
+
+
+  LambdaInvokeSFFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "LambdaInvokeSFFunction-${AWS::AccountId}"
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Runtime: python3.10
+      Layers:
+        - !Ref PowertoolsLayer
+      Role: !GetAtt 'LambdaInvokeSFFunctionRole.Arn'
+      Timeout: 600
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !GetAtt 'RedshiftETLStepFunction.Arn'
+          BUCKET_NAME: !Ref S3BucketNameLocal
+          SCRIPT_PATH: !Ref ScriptPath
+          RESULT_PATH: !Ref ResultPath
+          ERROR_PATH: !Ref ErrorPath
+      Code:
+        ZipFile: |
+          COPY THE CODE HERE
+
+
+  LambdaWorkflowFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "LambdaInvokeStepFunctionRole-${AWS::AccountId}"
+      Description: IAM Role for lambda to execute the Step Function
+      AssumeRolePolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            -
+              Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+      Path: /
+      # add managed policy to access the Step Function
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaBasicExecutionRole
+
+
+
+AWSLambdaBasicExecutionRole
+
+
+  LambdaWorkflowFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "LambdaWorkflowFunction-${AWS::AccountId}"
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Runtime: python3.10
+      Layers:
+        - !Ref PowertoolsLayer
+      Role: !GetAtt 'LambdaWorkflowFunctionRole.Arn'
+      Timeout: 600
+      #add environemnt variable for step function arn
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !GetAtt 'RedshiftETLStepFunction.Arn'
+          BUCKET_NAME: !Ref S3BucketNameLocal
+          SCRIPT_PATH: !Ref ScriptPath
+          RESULT_PATH: !Ref ResultPath
+          ERROR_PATH: !Ref ErrorPath
+      Code:
+        ZipFile: |
+          COPY THE CODE HERE
+
+
+
+
+
+
+
+
+
+
+
+  CopyScriptsFunction:
+    Type: Custom::CopyScriptsFunction
+    Properties:
+      ServiceToken: !GetAtt [LambdaCopyScriptsFunction, Arn]
+
+
+
+  InvokeSFFunction:
+    Type: Custom::InvokeSFFunction
+    Properties:
+      ServiceToken: !GetAtt [LambdaInvokeSFFunction, Arn]
+
+
+
+
+
+Outputs:
+  RedshiftETLStepFunctionArn:
+    Description: "The ARN of the lambda that copy scripts"
+    Value:
+      Ref: LambdaCopyScriptsFunction.Arn
