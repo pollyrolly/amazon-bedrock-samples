@@ -1,13 +1,17 @@
 
-# State Machines
+# AWS StepFunctions State Machines
 
-In this solution, the data collection is orchestrated with three StepFunctions state machines. 
+In this solution, the data collection is orchestrated with three AWS StepFunctions state machines. 
 
-At the lowest level (L1) the state machine uses only API calls to services (in asyncronous way) without any AWS Lambda functions. At this level the state machine is responsible for the execution of one SQL query.
+At the lowest level (L1) the state machine is responsible for the execution of one SQL query.
+In this particular implementation the state machine uses only API calls to services (in asyncronous way) without any AWS Lambda functions.
 
 The state machine is presented in Figure 1.
-
 ![State Machine Level-1 : Single SQl Query](images/SF_L1.png)
+
+
+
+
 
 At the second layer (Layer 2) the state machine  implements a loop in which the queries are executed one after another. This loop is orchestrated by means of a global state which contains the inputs for each step of the State Machine. The state machine is presented in Figure 2. the Lambda function in the state machine is used to process this global state as it changes during the execution of the state machine. The Lambda identifies which states are in the INITIAL state and starts the execution of the first next  SQL query in the INITIAL state. When the query is executed the Lambda function updates the global state with FAILED or SUCCEEDED and the state machine continues with the next query. The state machine is presented in Figure 2.
 
