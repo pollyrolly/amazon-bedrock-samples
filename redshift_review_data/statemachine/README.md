@@ -3,8 +3,8 @@
 
 In this solution, the data collection is orchestrated with three AWS StepFunctions state machines. 
 
-At the lowest level (L1) the state machine is responsible for the execution of one SQL query.
-In this particular implementation the state machine uses only API calls to services (in asyncronous way) without any AWS Lambda functions.
+At the lowest level (L1) the state machine is responsible for the execution of one single SQL query.
+In this particular implementation the state machine uses only API calls to services without any AWS Lambda functions. The API calls are asynchronous.
 
 The state machine is presented in Figure 1.
 ![State Machine Level-1 : Single SQl Query](../../images/SF_L1.png)
