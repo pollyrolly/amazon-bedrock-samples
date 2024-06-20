@@ -1,0 +1,132 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "Step Functions StartExecution",
+  "States": {
+    "Step Functions StartExecution": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::states:startExecution",
+      "Parameters": {
+        "Input": {
+          "Workflow.$": "$.QueryList",
+          "Query.$": "$.Query",
+          "S3BucketName": "scripts-logger-266726630905-us-west-2",
+          "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": "$$.Execution.Id"
+        },
+        "StateMachineArn": "arn:aws:states:us-west-2:266726630905:stateMachine:MyStateMachine-onquymonq"
+      },
+      "Next": "Wait",
+      "ResultPath": "$.result",
+      "TimeoutSecondsPath": "$.Query.TimeThreshold",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "PutObjectLogError",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+    "Wait": {
+      "Type": "Wait",
+      "Seconds": 2,
+      "Next": "DescribeExecution",
+      "InputPath": "$"
+    },
+    "DescribeExecution": {
+      "Type": "Task",
+      "Parameters": {
+        "ExecutionArn.$": "$.result.ExecutionArn"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:sfn:describeExecution",
+      "Next": "Choice",
+      "InputPath": "$",
+      "ResultPath": "$.input",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "PutObjectLogError"
+        }
+      ]
+    },
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.input.Status",
+          "StringEquals": "RUNNING",
+          "Next": "Wait"
+        }
+      ],
+      "Default": "Lambda Invoke",
+      "OutputPath": "$"
+    },
+    "PutObjectLogError": {
+      "Type": "Task",
+      "Parameters": {
+        "Body.$": "$",
+        "Bucket.$": "$.S3BucketName",
+        "Key.$": "$.Query.ErrorLocation"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "End": true
+    },
+    "Lambda Invoke": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "OutputPath": "$.Payload",
+      "Parameters": {
+        "Payload.$": "$",
+        "FunctionName": "arn:aws:lambda:us-west-2:266726630905:function:log-function:$LATEST"
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "if_end_of_workflow",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "PutObjectLogError"
+        }
+      ]
+    },
+    "if_end_of_workflow": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.continue",
+          "BooleanEquals": false,
+          "Next": "PutObjectLogEnd"
+        }
+      ],
+      "Default": "Step Functions StartExecution",
+      "OutputPath": "$.body"
+    },
+    "PutObjectLogEnd": {
+      "Type": "Task",
+      "Parameters": {
+        "Body.$": "$",
+        "Bucket.$": "$.S3BucketName",
+        "Key.$": "$.Query.ErrorLocation"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+      "End": true
+    }
+  }
+}
