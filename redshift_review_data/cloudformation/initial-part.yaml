@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Nested Stack for S3 buckets
-
 Mappings:
   Script:
     Config:
@@ -24,6 +23,15 @@ Mappings:
       WorkloadEvaluation: 'rpr_WorkloadEvaluation.sql'
 
 Parameters:
+  RedshiftClusterEndpoint:
+    Description: Redshift cluster endpoint including port number and database name
+    Type: String
+    Default: redshift-cluster.xxxxxx.region.redshift.amazonaws.com:5439/dev
+  DbUsername:
+    Description: Redshift database user name which has access to run SQL Script.
+    Type: String
+    AllowedPattern: "([a-z])([a-z]|[0-9])*"
+    Default: 'awsuser'
   S3BucketNameGlobal:
     Type: String
     Description: Name of the S3 bucket to store the SQL scripts
@@ -61,8 +69,88 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
     Metadata:
-      Comment: Bucket to store the SQL scripts
+      AWS::CloudFormation::Interface:
+        ParameterGroups:
+          - Label:
+              default: Input Parameters
+            Parameters:
+              - RedshiftClusterEndpoint
+              - DbUsername
+              - S3BucketNameGlobal
+              - S3BucketNameLocal
+              - ScriptPath
+              - ResultPath
+              - ErrorPath
 :
+
+  StateMachineWorkflowExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Description : IAM Role for the state machine in step function to run
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'states.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonRedshiftAllCommandsFullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftDataFullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftFullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftQueryEditor
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchEventsFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccessV2
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: RedshiftBatchDataApiPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'redshift-data:BatchExecuteStatement'
+                  - 'redshift-data:ListStatements'
+                  - 'redshift-data:GetStatementResult'
+                  - 'redshift-data:DescribeStatement'
+                  - 'redshift-data:ExecuteStatement'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'redshift:GetClusterCredentials'
+                Resource:
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:cluster:${SourceRedshiftClusterIdentifier}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]]}
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:dbname:${SourceRedshiftClusterIdentifier}/${RedshiftDatabaseName}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]],RedshiftDatabaseName: !Select [1, !Split ["/", !Ref RedshiftClusterEndpoint]]}   
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:dbuser:${SourceRedshiftClusterIdentifier}/${DbUsername}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]]}
+        - PolicyName: ScriptS3AccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetBucketLocation'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource: 
+                  - !Sub
+                      - arn:aws:s3:::${ETLScriptS3Bucket}/*
+                      - {ETLScriptS3Bucket: !Select [0, !Split ["/", !Ref ETLScriptS3Path]]}
+                  - !Sub
+                      - arn:aws:s3:::${ETLScriptS3Bucket}
+                      - {ETLScriptS3Bucket: !Select [0, !Split ["/", !Ref ETLScriptS3Path]]}
+
+
   PowertoolsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -226,9 +314,6 @@ Resources:
 
 
 
-AWSLambdaBasicExecutionRole
-
-
   LambdaWorkflowFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -251,12 +336,6 @@ AWSLambdaBasicExecutionRole
       Code:
         ZipFile: |
           COPY THE CODE HERE
-
-
-
-
-
-
 
 
 

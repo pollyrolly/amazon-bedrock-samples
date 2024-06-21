@@ -1,156 +1,128 @@
 {
-  "S3BucketName": "scripts-logger-266726630905-us-west-2",
-  "Query": {
-    "ScriptName": "scripts/rpr_NodeDetails.sql",
-    "OutputLocation": "result/NodeDetails.json",
-    "ErrorLocation": "error/",
-    "TimeThreshold": 600,
-    "Status": "INITIAL",
-    "Script": "NodeDetails"
-  },
-  "QueryList": {
     "NodeDetails": {
       "ScriptName": "scripts/rpr_NodeDetails.sql",
-      "OutputLocation": "result/NodeDetails.json",
+      "OutputLocation": "result/node_details.json",
       "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
+
       "Script": "NodeDetails"
     },
     "QueueHealth": {
       "ScriptName": "scripts/rpr_QueueHealth.sql",
-      "OutputLocation": "result/QueueHealth.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/queue_health.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "QueueHealth"
     },
     "AlterTableRecommendation": {
       "ScriptName": "scripts/rpr_AlterTableRecommendation.sql",
       "OutputLocation": "result/AlterTableRecommendation.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "AlterTableRecommendation"
     },
     "SpectrumPerformance": {
       "ScriptName": "scripts/rpr_SpectrumPerformance.sql",
-      "OutputLocation": "result/SpectrumPerformance.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/spectrum_performance.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "SpectrumPerformance"
     },
     "ATOWorkerActions": {
       "ScriptName": "scripts/rpr_ATOWorkerActions.sql",
-      "OutputLocation": "result/ATOWorkerActions.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/ato_worker_actions.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "ATOWorkerActions"
     },
     "ConcurrencyScalingUsage": {
       "ScriptName": "scripts/rpr_ConcurrencyScalingUsage.sql",
-      "OutputLocation": "result/ConcurrencyScalingUsage.json",
+      "OutputLocation": "result/concurrency_scaling_usage.json",
       "TimeThreshold": 600,
       "Status": "INITIAL",
       "Script": "ConcurrencyScalingUsage"
     },
     "CopyPerformance": {
       "ScriptName": "scripts/rpr_CopyPerformance.sql",
-      "OutputLocation": "result/CopyPerformance.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/copy_performance.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "CopyPerformance"
     },
     "DataShareConsumerUsage": {
       "ScriptName": "scripts/rpr_DataShareConsumerUsage.sql",
-      "OutputLocation": "result/DataShareConsumerUsage.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/data_share_consumer_usage.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "DataShareConsumerUsage"
     },
     "DataShareProducerObject": {
       "ScriptName": "scripts/rpr_DataShareProducerObject.sql",
-      "OutputLocation": "result/DataShareProducerObject.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/data_share_producer_object.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "DataShareProducerObject"
     },
     "MaterializedView": {
       "ScriptName": "scripts/rpr_MaterializedView.sql",
-      "OutputLocation": "result/MaterializedView.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/materialized_view.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "MaterializedView"
     },
     "TableAlerts": {
       "ScriptName": "scripts/rpr_TableAlerts.sql",
-      "OutputLocation": "result/TableAlerts.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/table_alerts.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "TableAlerts"
     },
     "TableInfo": {
       "ScriptName": "scripts/rpr_TableInfo.sql",
-      "OutputLocation": "result/TableInfo.json",
+      "OutputLocation": "result/table_info.json",
       "TimeThreshold": 600,
-      "ErrorLocation": "error/",
       "Status": "INITIAL",
       "Script": "TableInfo"
     },
     "Top50QueriesByDiskSpill": {
       "ScriptName": "scripts/rpr_Top50QueriesByDiskSpill.sql",
-      "OutputLocation": "result/Top50QueriesByDiskSpill.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/top_50_queries_by_disk_spill.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "Top50QueriesByDiskSpill"
     },
     "Top50QueriesByRunTime": {
       "ScriptName": "scripts/rpr_Top50QueriesByRunTime.sql",
-      "OutputLocation": "result/Top50QueriesByRunTime.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/top_50_queries_by_run_time.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "Top50QueriesByRunTime"
     },
     "UsagePattern": {
       "ScriptName": "scripts/rpr_UsagePattern.sql",
-      "OutputLocation": "result/UsagePattern.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/usage_pattern.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "UsagePattern"
     },
     "WLMandCommit": {
       "ScriptName": "scripts/rpr_WLMandCommit.sql",
-      "OutputLocation": "result/WLMandCommit.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/wlm_and_commit.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "WLMandCommit"
     },
     "WLMConfig": {
       "ScriptName": "scripts/rpr_WLMConfig.sql",
-      "OutputLocation": "result/WLMConfig.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/wlm_config.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "WLMConfig"
     },
     "WorkloadEvaluation": {
       "ScriptName": "scripts/rpr_WorkloadEvaluation.sql",
-      "OutputLocation": "result/WorkloadEvaluation.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
+      "OutputLocation": "result/workload_evaluation.json",
+      "TimeThreshold": 600, "ErrorLocation": "error/", 
       "Status": "INITIAL",
       "Script": "WorkloadEvaluation"
     }
   }
-}

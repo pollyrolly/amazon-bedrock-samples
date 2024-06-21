@@ -8,16 +8,16 @@ def handler(event, context):
     source_prefix = os.environ['SOURCE_PREFIX']
     destination_bucket = os.environ['DESTINATION_BUCKET']
     destination_prefix = os.environ['DESTINATION_PREFIX']
-    
+
     print(event)
     s3 = boto3.client('s3')
     response ={}
     if event['RequestType'] != 'Delete':
         try:
-            source_bucket = event['ResourceProperties'].get('S3Global')
-            source_prefix = event['ResourceProperties'].get('ScriptPath')+'/'
-            destination_bucket = event['ResourceProperties'].get('S3Local')
-            destination_prefix = event['ResourceProperties'].get('ScriptPath')+'/'
+            #source_bucket = event['ResourceProperties'].get('S3Global')
+            #source_prefix = event['ResourceProperties'].get('ScriptPath')+'/'
+            #destination_bucket = event['ResourceProperties'].get('S3Local')
+            #destination_prefix = event['ResourceProperties'].get('ScriptPath')+'/'
 
             response = s3.list_objects_v2(Bucket=source_bucket, Prefix=source_prefix)
 

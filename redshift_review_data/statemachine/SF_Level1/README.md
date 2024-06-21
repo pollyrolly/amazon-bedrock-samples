@@ -1,13 +1,48 @@
 
-# State Machines
+# AWS StepFunctions State Machines - Level 1 - Single Query Execution
 
-In this solution, the data collection is orchestrated with three StepFunctions state machines. 
+In this solution, the data collection is orchestrated with three AWS StepFunctions state machines. 
 
-At the lowest level (L1) the state machine uses only API calls to services (in asyncronous way) without any AWS Lambda functions. At this level the state machine is responsible for the execution of one SQL query.
+At this level the state machine is responsible for the execution of one SQL query.
+In this particular implementation the state machine uses only API calls to services (in asyncronous way) without any AWS Lambda functions.
+
+Pre-requisites:
+
+1. The SQL scripts are stored in the local S3 bucket, under the prefix scripts.
+![SQL Scripts](images/S3scripts.png)
+
+For example, a beginning of the script for NodeDetails stored in the S3 bucket is presented in the following code snippet:
+
+```sql
+WITH node_slice AS
+(
+  SELECT node, COUNT(1) AS slice_count
+  FROM stv_slices
+  GROUP BY node
+),
+node_storage_utilization AS
+(
+  SELECT node::text AS node,
+         (1.0 * used / capacity)::NUMERIC(8,4) * 100 AS storage_utilization_pct,
+         1.0 * capacity/1000 AS storage_capacity_gb,
+         1.0 * used/1000 AS storage_used_gb
+  FROM stv_node_storage_capacity
+)
+SELECT CASE
+         WHEN capacity = 190633 AND NOT is_nvme THEN 'dc1.large'
+         WHEN capacity = 380319 THEN 'dc1.8xlarge'
+         WHEN capacity = 190633 AND is_nvme THEN 'dc2.large'
+         WHEN capacity = 760956 THEN 'dc2.8xlarge'
+         WHEN capacity = 726296 THEN 'dc2.8xlarge'
+```
+
 
 The state machine is presented in Figure 1.
-
 ![State Machine Level-1 : Single SQl Query](images/SF_L1.png)
+
+
+
+
 
 At the second layer (Layer 2) the state machine  implements a loop in which the queries are executed one after another. This loop is orchestrated by means of a global state which contains the inputs for each step of the State Machine. The state machine is presented in Figure 2. the Lambda function in the state machine is used to process this global state as it changes during the execution of the state machine. The Lambda identifies which states are in the INITIAL state and starts the execution of the first next  SQL query in the INITIAL state. When the query is executed the Lambda function updates the global state with FAILED or SUCCEEDED and the state machine continues with the next query. The state machine is presented in Figure 2.
 

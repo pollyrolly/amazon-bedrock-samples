@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../getting-started-with-amazon-redshift-data-api"
+		}
+	],
+	"settings": {}
+}

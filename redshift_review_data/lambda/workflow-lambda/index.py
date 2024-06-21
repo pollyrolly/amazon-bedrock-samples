@@ -1,18 +1,7 @@
 import boto3
 import traceback
 import json
-
-from aws_lambda_powertools import Logger
-#from aws_lambda_powertools import Tracer
-#from aws_lambda_powertools import Metrics
-
-logger = Logger()
-#metrics = Metrics(namespace="PowertoolsSample")
-import json
-
-import boto3
-import traceback
-import json
+from uuid import uuid4
 
 
 def lambda_handler(event, context):
@@ -24,6 +13,9 @@ def lambda_handler(event, context):
     workflow = state.get("Workflow")
     script = query.get("Script")
     status = event.get("input").get("Status")
+    
+    uuid_str = str(uuid4())
+    last_string = uuid_str.split('-')[-1]
     
     print(script)
     print(status)
@@ -51,7 +43,9 @@ def lambda_handler(event, context):
         'statusCode': 200,
         'body': {
             "QueryList": workflow,
-            "Query": "",
+            "Query": {
+                "OutputLocation": f"manifest/workflow-{last_string}.manifest"
+            },
             "S3BucketName": bucket
         },
         'continue': False
