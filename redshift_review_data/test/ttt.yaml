@@ -465,7 +465,7 @@ Resources:
       Runtime: python3.10
       Layers:
         - !Ref PowertoolsLayer
-      Role: !GetAtt LambdaCopyScriptsFunctionRole.Arn
+      Role: !GetAtt LambdaCopyScriptsRole.Arn
       Timeout: 600
       Environment:
         Variables: 
@@ -562,26 +562,22 @@ Resources:
       ServiceToken: !GetAtt LambdaInvokeStepFunction.Arn
 
 Outputs: 
-    RedshiftClusterEndpointArn:
-      Description: The ID of the Redshift Cluster being referenced.
-      Value: !Ref RedshiftClusterEndpoint.Arn
-
     LambdaCopyScriptsFunctionArn:
       Description: The ARN of the lambda that copy scripts
-      Value: !Ref LambdaCopyScriptsFunction.Arn
+      Value: !GetAtt LambdaCopyScriptsFunction.Arn
 
-    LambdaInvokeSFFunctionArn:
+    LambdaInvokeStepFunctionArn:
       Description: The ARN of the lambda that invokes ssf
-      Value: !Ref LambdaInvokeSFFunction.Arn
+      Value: !GetAtt LambdaInvokeStepFunction.Arn
 
     LambdaWorkflowArn:
       Description: The ARN of the lambda that invokes ssf
-      Value: !Ref LambdaWorkflow.Arn
+      Value: !GetAtt LambdaWorkflow.Arn
 
     LambdaCreateOutputArn:
       Description: The ARN of the lambda that invokes ssf
-      Value: !Ref LambdaCreateOutput.Arn
+      Value: !GetAtt LambdaCreateOutput.Arn
 
     LambdaProcessResultsArn:
       Description: The ARN of the lambda that invokes ssf
-      Value: !Ref LambdaProcessResults.Arn
+      Value: !GetAtt LambdaProcessResults.Arn
