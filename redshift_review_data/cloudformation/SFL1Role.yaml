@@ -1,0 +1,346 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nested Stack for StateMachines
+
+Parameters:
+  RedshiftClusterEndpoint:
+    Description: The endpoint of the evaluated Redshift Cluster.
+    Type: String
+    Default: redshift-cluster-1.ccttwqjmja5e.us-west-2.redshift.amazonaws.com:5439/sample_data_dev
+  DbUsername:
+    Description: The username of the super user
+    Type: String
+    Default: awsuser
+  ScriptPath:
+    Description: Script Path
+    Type: String
+    Default: scripts/
+  ResultPath:
+    Description: Result Path
+    Type: String
+    Default: result/
+  ErrorPath:
+    Description: Error Path
+    Type: String
+    Default: error/
+  S3BucketName:
+    Description: The S3 bucket name 
+    Type: String
+    Default: scripts-logger-266726630905-us-west-2
+
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Input Parameters
+        Parameters:
+          - RedshiftClusterEndpoint
+          - DbUsername
+          - S3BucketName
+          - ScriptPath
+          - ResultPath
+          - ErrorPath
+
+
+
+Resources:
+  StateMachineL1Role:
+    Type: AWS::IAM::Role
+    Properties:
+      Description : IAM Role for SF_L1
+      RoleName: !Sub SF_Layer1Role-${AWS::AccountId}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub 'states.amazonaws.com'
+            Action: 'sts:AssumeRole'
+
+      Path: /
+      Policies:
+        - PolicyName: sfl1-RedshiftDataApiPolicy1
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'redshift-data:ExecuteStatement'
+                Resource: 
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:cluster:${SourceRedshiftClusterIdentifier}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split ['.', !Ref RedshiftClusterEndpoint]]}
+
+        - PolicyName: sfl1-RedshiftDataApiPolicy2
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'redshift-data:DescribeStatement'
+                  - 'redshift-data:GetStatementResult'
+                Resource: 
+                  - '*'
+        - PolicyName: sfl1-RedshiftDataApiPolicy3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'redshift:GetClusterCredentials'
+                Resource:
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:cluster:${SourceRedshiftClusterIdentifier}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split ['.', !Ref RedshiftClusterEndpoint]]}
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:dbname:${SourceRedshiftClusterIdentifier}/${RedshiftDatabaseName}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split ['.', !Ref RedshiftClusterEndpoint]],RedshiftDatabaseName: !Select [1, !Split ['/', !Ref RedshiftClusterEndpoint]]}   
+                  - !Sub 
+                      - arn:aws:redshift:${AWS::Region}:${AWS::AccountId}:dbuser:${SourceRedshiftClusterIdentifier}/${DbUsername}
+                      - {SourceRedshiftClusterIdentifier: !Select [0, !Split ['.', !Ref RedshiftClusterEndpoint]]}
+        - PolicyName: sfl1-ScriptAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetBucketLocation'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource: 
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ScriptPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ScriptPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}
+        - PolicyName: sfl1-OutputAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: 
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}
+        - PolicyName: sfl1-XRayPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'xray:PutTraceSegments'
+                  - 'xray:PutTelemetryRecords'
+                  - 'xray:GetSamplingRules'
+                  - 'xray:GetSamplingTargets'
+                Resource:
+                  - '*'
+        - PolicyName: sfl1-LogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - '*'
+
+  SFLayer1:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub SF_Layer1-${AWS::AccountId}
+      DefinitionString: !Sub 
+        - |-
+            {
+              "Comment": "Layer 1 State Machine",
+              "StartAt": "GetSQLQueryDoc",
+              "States": {
+                "GetSQLQueryDoc": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "Bucket.$": "$.S3BucketName",
+                    "Key.$": "$.Query.ScriptName"
+                  },
+                  "ResultPath": "$.sql_output",
+                  "ResultSelector": {
+                    "sql_output.$": "$.Body"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+                  "Next": "GetClusterCredentials",
+                  "HeartbeatSeconds": 10,
+                  "TimeoutSeconds": 300,
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "ErrorWriteCatcher",
+                      "ResultPath": "$.error.getsdlquerydoc"
+                    }
+                  ]
+                },
+                "ErrorWriteCatcher": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "Body.$": "$.error",
+                    "Bucket.$": "$.S3BucketName",
+                    "Key.$": "$.Query.ErrorLocation"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+                  "Next": "review_query_failure"
+                },
+                "GetClusterCredentials": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "ClusterIdentifier": "redshift-cluster-1",
+                    "DbUser": "awsuser"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:redshift:getClusterCredentials",
+                  "Next": "ExecuteStatement",
+                  "InputPath": "$.sql_output.sql_output",
+                  "ResultPath": "$.auth",
+                  "TimeoutSeconds": 600,
+                  "HeartbeatSeconds": 30,
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "ErrorWriteCatcher",
+                      "ResultPath": "$.error.getclustercredentials"
+                    }
+                  ]
+                },
+                "ExecuteStatement": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "ClusterIdentifier": "redshift-cluster-1",
+                    "Database": "sample_data_dev",
+                    "Sql.$": "$.sql_output.sql_output",
+                    "DbUser": "awsuser"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:redshiftdata:executeStatement",
+                  "Next": "WaitForCompletion",
+                  "ResultPath": "$.sql_output",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "ErrorWriteCatcher",
+                      "ResultPath": "$.error.executestatement"
+                    }
+                  ],
+                  "TimeoutSeconds": 280,
+                  "HeartbeatSeconds": 10
+                },
+                "WaitForCompletion": {
+                  "Comment": "Wait before status check",
+                  "Type": "Wait",
+                  "Seconds": 20,
+                  "Next": "CheckStatus"
+                },
+                "CheckStatus": {
+                  "Comment": "Check Query Status",
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::aws-sdk:redshiftdata:describeStatement",
+                  "ResultPath": "$.sql_output",
+                  "Parameters": {
+                    "Id.$": "$.sql_output.Id"
+                  },
+                  "Next": "is_run_complete",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "ErrorWriteCatcher",
+                      "ResultPath": "$.error.checkstatus"
+                    }
+                  ]
+                },
+                "is_run_complete": {
+                  "Comment": "check if run_review_query step is complete",
+                  "Type": "Choice",
+                  "Choices": [
+                    {
+                      "Variable": "$.sql_output.Status",
+                      "StringEquals": "FAILED",
+                      "Next": "ErrorWriteCatcher"
+                    },
+                    {
+                      "Variable": "$.sql_output.Status",
+                      "StringEquals": "FINISHED",
+                      "Next": "ReadResult"
+                    }
+                  ],
+                  "Default": "WaitForCompletion"
+                },
+                "ReadResult": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::aws-sdk:redshiftdata:getStatementResult",
+                  "Parameters": {
+                    "Id.$": "$.sql_output.Id"
+                  },
+                  "ResultPath": "$.query_result",
+                  "Next": "SaveResult SUCCESS",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "ErrorWriteCatcher",
+                      "ResultPath": "$.error.getstatementresult"
+                    }
+                  ]
+                },
+                "SaveResult SUCCESS": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "Body.$": "$.query_result",
+                    "Bucket.$": "$.S3BucketName",
+                    "Key.$": "$.Query.OutputLocation"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+                  "Next": "review_query_success",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "ErrorWriteCatcher",
+                      "ResultPath": "$.error.saveresult"
+                    }
+                  ],
+                  "TimeoutSeconds": 300,
+                  "HeartbeatSeconds": 10,
+                  "ResultPath": "$.complete_result"
+                },
+                "review_query_failure": {
+                  "Type": "Fail",
+                  "Cause": "Failure on Sales Data Pipeline",
+                  "Error": "Error"
+                },
+                "review_query_success": {
+                  "Type": "Succeed"
+                }
+              }
+            }
+        - RedshiftClusterIdentifier: !Select [0, !Split [".", !Ref RedshiftClusterEndpoint]]
+          RedshiftDbName: !Select [1, !Split ["/", !Ref RedshiftClusterEndpoint]]
+          RedshiftDbUser: !Ref DbUsername
+
+      RoleArn: !GetAtt StateMachineL1Role.Arn
+
+
+Outputs:
+  SFLayer1Name:
+    Description: "The Name of SFLayer1 state machine"
+    Value: !GetAtt SFLayer1.StateMachineName

@@ -38,27 +38,7 @@ Metadata:
           - DbUsername
           - ScriptPath
           - ResultPath
-Mappings:
-  Script: # static values related to the scripts.
-    Config:
-      NodeDetails: 'rpr_NodeDetails.sql'
-      QueueHealth: 'rpr_QueueHealth.sql'
-      AlterTableRecommendation: 'rpr_AlterTableRecommendation.sql'
-      SpectrumPerformance: 'rpr_SpectrumPerformance.sql'
-      ATOWorkerActions: 'rpr_ATOWorkerActions.sql'
-      ConcurrencyScalingUsage: 'rpr_ConcurrencyScalingUsage.sql'
-      CopyPerformance: 'rpr_CopyPerformance.sql'
-      DataShareConsumerUsage: 'rpr_DataShareConsumerUsage.sql'
-      DataShareProducerObject: 'rpr_DataShareProducerObject.sql'
-      MaterializedView: 'rpr_MaterializedView.sql'
-      TableAlerts: 'rpr_TableAlerts.sql'
-      Tablelnfo: 'rpr_Tablelnfo.sql'
-      Top50QueriesByDiskSpill: 'rpr_Top50QueriesByDiskSpill.sql'
-      Top50QueriesByRunTime: 'rpr_Top50QueriesByRunTime.sql'
-      UsagePattern: 'rpr_UsagePattern.sql'
-      WLMandCommit: 'rpr_WLMandCommit.sql'
-      WLMConfig: 'rpr_WLMConfig.sql'
-      WorkloadEvaluation: 'rpr_WorkloadEvaluation.sql'
+
 
 Resources:
 # create here three nested stacks
@@ -72,7 +52,7 @@ Resources:
         ScriptPath: !Ref ScriptPath
         ResultPath: !Ref ResultPath
 
-  NestedStackStepFunctions:
+  NestedStackStateMachines:
     Type: AWS::CloudFormation::Stack
     Properties:
       TemplateURL: !Sub 'https://s3.amazonaws.com/${S3BucketNameGlobal}/stacks/nested-stack-step-functions.yaml'
@@ -83,7 +63,7 @@ Resources:
         ScriptPath: !Ref ScriptPath
         ResultPath: !Ref ResultPath
 
-  StateMachineExecutionRole:
+  NestedStackLambdas:
     Type: 'AWS::IAM::Role'
     Properties:
       Description : IAM Role for the state machine in step function to run
@@ -360,3 +340,18 @@ Outputs:
     Description: "The ARN of the step function used for ETL orchestration"
     Value:
       Ref: RedshiftETLStepFunction
+
+
+
+
+
+
+  CopyScriptsFunction:
+    Type: Custom::CopyScriptsFunction
+    Properties:
+      ServiceToken: !GetAtt LambdaCopyScriptsFunction.Arn
+
+  InvokeStepFunction:
+    Type: Custom::InvokeStepFunction
+    Properties:
+      ServiceToken: !GetAtt LambdaInvokeStepFunction.Arn

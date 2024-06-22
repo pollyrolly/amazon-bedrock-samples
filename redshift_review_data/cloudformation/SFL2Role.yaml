@@ -1,0 +1,267 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nested Stack for StateMachines
+
+Parameters:
+  SFLayer1StateMachine:
+    Description: The ARN of the Step Function
+    Type: String
+    Default: SF_Layer1-266726630905
+  ScriptPath:
+    Description: Script Path
+    Type: String
+    Default: scripts/
+  ResultPath:
+    Description: Result Path
+    Type: String
+    Default: result/
+  ErrorPath:
+    Description: Error Path
+    Type: String
+    Default: error/
+  S3BucketName:
+    Description: The S3 bucket name 
+    Type: String
+    Default: scripts-logger-266726630905-us-west-2
+  LambdaWorkflowName:
+    Description: The Lambda name  that is
+    Type: String
+    Default: LambdaWorkflow-266726630905
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Input Parameters
+        Parameters:
+          - SFLayer1StateMachine
+          - S3BucketName
+          - ScriptPath
+          - ResultPath
+          - ErrorPath
+          - LambdaWorkflowName
+
+Resources:
+  StateMachineL2Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Description : IAM Role for SF_L2
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub 'states.amazonaws.com'
+            Action: 'sts:AssumeRole'
+
+      Path: /
+      Policies:
+        - PolicyName: sfl2-OutputAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: 
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}
+        - PolicyName: sfl2-XRayPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'xray:PutTraceSegments'
+                  - 'xray:PutTelemetryRecords'
+                  - 'xray:GetSamplingRules'
+                  - 'xray:GetSamplingTargets'
+                Resource:
+                  - '*'
+        - PolicyName: sfl2-sfExecution
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'states:DescribeExecution'
+                  - 'states:StartExecution'
+                  - 'states:StopExecution'
+                Resource:
+                  - !Sub arn:aws:states:*:266726630905:stateMachine:${SFLayer1StateMachine}
+                  - !Sub arn:aws:states:*:266726630905:execution:${SFLayer1StateMachine}:*
+        - PolicyName: sfl2-InvokeLambda
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'lambda:InvokeFunction'
+                Resource:
+                  - !Sub arn:aws:lambda:us-west-2:266726630905:function:${LambdaWorkflowName}:*
+                  - !Sub arn:aws:lambda:us-west-2:266726630905:function:${LambdaWorkflowName}
+        - PolicyName: LogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - '*'
+  SFLayer2:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub SF_Layer2-${AWS::AccountId}
+      DefinitionString: !Sub 
+        - |-
+            {
+              "Comment": "A description of my state machine",
+              "StartAt": "Step Functions StartExecution",
+              "States": {
+                "Step Functions StartExecution": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::states:startExecution",
+                  "Parameters": {
+                    "Input": {
+                      "Workflow.$": "$.QueryList",
+                      "Query.$": "$.Query",
+                      "S3BucketName": "${S3BucketName}",
+                      "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": "$$.Execution.Id"
+                    },
+                    "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${SFLayer1StateMachine}"
+                  },
+                  "Next": "Wait",
+                  "ResultPath": "$.result",
+                  "TimeoutSecondsPath": "$.Query.TimeThreshold",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "PutObjectLogError",
+                      "ResultPath": "$.error"
+                    }
+                  ]
+                },
+                "Wait": {
+                  "Type": "Wait",
+                  "Seconds": 40,
+                  "Next": "DescribeExecution",
+                  "InputPath": "$"
+                },
+                "DescribeExecution": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "ExecutionArn.$": "$.result.ExecutionArn"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:sfn:describeExecution",
+                  "Next": "Choice",
+                  "InputPath": "$",
+                  "ResultPath": "$.input",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "ResultPath": "$.error",
+                      "Next": "PutObjectLogError"
+                    }
+                  ]
+                },
+                "Choice": {
+                  "Type": "Choice",
+                  "Choices": [
+                    {
+                      "Variable": "$.input.Status",
+                      "StringEquals": "RUNNING",
+                      "Next": "Wait"
+                    }
+                  ],
+                  "Default": "Lambda Invoke",
+                  "OutputPath": "$"
+                },
+                "PutObjectLogError": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "Body.$": "$",
+                    "Bucket.$": "$.S3BucketName",
+                    "Key.$": "$.Query.ErrorLocation"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+                  "End": true
+                },
+                "Lambda Invoke": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "OutputPath": "$.Payload",
+                  "Parameters": {
+                    "Payload.$": "$",
+                    "FunctionName": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaWorkflowName}:$LATEST"
+                  },
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                      ],
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "BackoffRate": 2
+                    }
+                  ],
+                  "Next": "if_end_of_workflow",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "ResultPath": "$.error",
+                      "Next": "PutObjectLogError"
+                    }
+                  ]
+                },
+                "if_end_of_workflow": {
+                  "Type": "Choice",
+                  "Choices": [
+                    {
+                      "Variable": "$.continue",
+                      "BooleanEquals": false,
+                      "Next": "PutObjectLogEnd"
+                    }
+                  ],
+                  "Default": "Step Functions StartExecution",
+                  "OutputPath": "$.body"
+                },
+                "PutObjectLogEnd": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "Body.$": "$",
+                    "Bucket.$": "$.S3BucketName",
+                    "Key.$": "$.Query.OutputLocation"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:s3:putObject",
+                  "End": true,
+                  "ResultPath": "$.input"
+                }
+              }
+            }
+        - LambdaWorkflowName: !Ref LambdaWorkflowName
+          S3BucketName: !Ref S3BucketName
+          SFLayer1StateMachine: !Ref SFLayer1StateMachine
+
+      RoleArn: !GetAtt StateMachineL2Role.Arn
+
+
+Outputs:
+  SFLayer2Name:
+    Description: "The Name of SFLayer2 state machine"
+    Value: !GetAtt SFLayer2.StateMachineName

@@ -1,0 +1,296 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nested Stack for S3 buckets
+
+Parameters:
+  StateMachineLayer2:
+    Description: The ARN of the Step Function
+    Type: String
+    Default: SF_Layer2-266726630905
+  ScriptPath:
+    Description: Script Path
+    Type: String
+    Default: scripts/
+  ResultPath:
+    Description: Result Path
+    Type: String
+    Default: result/
+  ErrorPath:
+    Description: Error Path
+    Type: String
+    Default: error/
+  S3BucketName:
+    Description: The S3 bucket name 
+    Type: String
+    Default: scripts-logger-266726630905-us-west-2
+  LambdaProcessResultsName:
+    Description: The Lambda processing results
+    Type: String
+    Default: LambdaProcessResults-266726630905
+  LambdaCreateOutputName:
+    Description: The Lambda creating output
+    Type: String
+    Default: LambdaCreateOutput-266726630905
+  SNSTopic:
+    Description: SNS Topic
+    Type: String
+    Default: redshift_review_error_topic_standard
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Input Parameters
+        Parameters:
+          - StateMachineLayer2
+          - S3BucketName
+          - ScriptPath
+          - ResultPath
+          - ErrorPath
+          - LambdaCreateOutputName
+          - LambdaProcessResultsName
+          - SNSTopic
+
+Resources:
+  StateMachineL3Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Description : IAM Role for SF_L1
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub 'states.amazonaws.com'
+            Action: 'sts:AssumeRole'
+
+      Path: /
+      Policies:
+        - PolicyName: sfl3-OutputAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: 
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}
+        - PolicyName: sfl3-XRayPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'xray:PutTraceSegments'
+                  - 'xray:PutTelemetryRecords'
+                  - 'xray:GetSamplingRules'
+                  - 'xray:GetSamplingTargets'
+                Resource:
+                  - '*'
+        - PolicyName: sfl3-sfExecution
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'states:DescribeExecution'
+                  - 'states:StartExecution'
+                  - 'states:StopExecution'
+                Resource:
+                  - !Sub arn:aws:states:*:266726630905:stateMachine:${StateMachineLayer2}
+                  - !Sub arn:aws:states:*:266726630905:execution:${StateMachineLayer2}:*
+        - PolicyName: sfl3-InvokeLambda
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'lambda:InvokeFunction'
+                Resource:
+                  - !Sub arn:aws:lambda:us-west-2:266726630905:function:${LambdaProcessResultsName}:*
+                  - !Sub arn:aws:lambda:us-west-2:266726630905:function:${LambdaProcessResultsName}
+                  - !Sub arn:aws:lambda:us-west-2:266726630905:function:${LambdaCreateOutputName}:*
+                  - !Sub arn:aws:lambda:us-west-2:266726630905:function:${LambdaCreateOutputName}
+        - PolicyName: sfl3-LogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - '*'
+        - PolicyName: sfl3-sns1
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                - sns:Publish
+                Resource:
+                  - arn:aws:sns:*:266726630905:*
+        - PolicyName: sfl3-sns2
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement: 
+              - Effect: Allow
+                Action :
+                - sns:ListTopics
+                Resource:
+                  - '*'
+  SFLayer3:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub SF_Layer3-${AWS::AccountId}
+      DefinitionString: !Sub 
+        - |-
+            {
+              "Comment": "A description of my state machine",
+              "StartAt": "Step Functions StartExecution",
+              "States": {
+                "Step Functions StartExecution": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::states:startExecution",
+                  "Parameters": {
+                    "StateMachineArn": "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${StateMachineLayer2}",
+                    "Input": {
+                      "QueryList.$": "$.QueryList",
+                      "Query.$": "$.Query",
+                      "S3BucketName": "scripts-logger-266726630905-us-west-2",
+                      "AWS_STEP_FUNCTIONS_STARTED_BY_EXECUTION_ID.$": "$$.Execution.Id"
+                    }
+                  },
+                  "Next": "Wait",
+                  "ResultPath": "$.result"
+                },
+                "Wait": {
+                  "Type": "Wait",
+                  "Seconds": 900,
+                  "Next": "DescribeExecution"
+                },
+                "DescribeExecution": {
+                  "Type": "Task",
+                  "Parameters": {
+                    "ExecutionArn.$": "$.result.ExecutionArn"
+                  },
+                  "Resource": "arn:aws:states:::aws-sdk:sfn:describeExecution",
+                  "Next": "if_sf_running",
+                  "InputPath": "$",
+                  "ResultPath": "$.input"
+                },
+                "if_sf_running": {
+                  "Type": "Choice",
+                  "Choices": [
+                    {
+                      "Variable": "$.input.Status",
+                      "StringEquals": "RUNNING",
+                      "Next": "DescribeExecution"
+                    }
+                  ],
+                  "Default": "ProcessResults",
+                  "OutputPath": "$"
+                },
+                "ProcessResults": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "OutputPath": "$.Payload",
+                  "Parameters": {
+                    "Payload.$": "$",
+                    "FunctionName": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}}:function:${LambdaProcessResultsName}:$LATEST"
+                  },
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                      ],
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "BackoffRate": 2
+                    }
+                  ],
+                  "Next": "if_persistant_error"
+                },
+                "if_persistant_error": {
+                  "Type": "Choice",
+                  "Choices": [
+                    {
+                      "Variable": "$.rerun",
+                      "BooleanEquals": true,
+                      "Next": "Step Functions StartExecution"
+                    },
+                    {
+                      "And": [
+                        {
+                          "Variable": "$.succedded",
+                          "BooleanEquals": false
+                        },
+                        {
+                          "Variable": "$.rerun",
+                          "BooleanEquals": false
+                        }
+                      ],
+                      "Next": "SNS Publish"
+                    }
+                  ],
+                  "Default": "CreateOutput",
+                  "OutputPath": "$"
+                },
+                "CreateOutput": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::lambda:invoke",
+                  "OutputPath": "$.Payload",
+                  "Parameters": {
+                    "Payload.$": "$",
+                    "FunctionName": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}}:function:${LambdaCreateOutputName}:$LATEST"
+                  },
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                      ],
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "BackoffRate": 2
+                    }
+                  ],
+                  "End": true
+                },
+                "SNS Publish": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::sns:publish",
+                  "Parameters": {
+                    "Message.$": "$",
+                    "TopicArn": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:${SNSTopic}"
+                  },
+                  "End": true,
+                  "InputPath": "$.error"
+                }
+              }
+            }
+        - LambdaCreateOutputName: !Ref LambdaCreateOutputName
+          S3BucketName: !Ref S3BucketName
+          StateMachineLayer2: !Ref StateMachineLayer2
+          LambdaProcessResultsName: !Ref LambdaProcessResultsName
+          SNSTopic: !Ref SNSTopic
+
+      RoleArn: !GetAtt StateMachineL3Role.Arn
+
+
+Outputs:
+  SFLayer3Arn:
+    Description: "SFLayer3 ARN"
+    Value: !GetAtt SFLayer3.Arn

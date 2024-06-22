@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Example CloudFormation template with resource import
+
+Resources:
+  LambdaWorkflowRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Delete
+    Properties:
+      RoleName: 'event-lambda-role'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+
+
+  LambdaWorkflow:
+    Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
+    Properties: 
+      Role: !GetAtt LambdaWorkflowRole.Arn
+      Description: Lambda to execute the step function
+      MemorySize: 128
+      Timeout: 60
+      Handler: index.handler
+      Runtime: python3.10
+      Architectures:
+        - x86_64
+      Layers:
+        - arn:aws:lambda:us-west-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:71
+      SnapStart:
+        ApplyOn: None
+      RuntimeManagementConfig:
+        UpdateRuntimeOn: Auto
+      Code:
+        ZipFile: |
+          import boto3
+          import traceback
+          import json
+
+          def lambda_handler(event, context):
+              # TODO implement
+              print(event)

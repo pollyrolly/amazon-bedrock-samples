@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "CloudFormation Template to deploy infrastructure for an automated Amazon Redshift review"
+Parameters:
+  RedshiftClusterEndpoint:
+    Description: The endpoint of the evaluated Redshift Cluster.
+    Type: String
+    Default: redshift-cluster-1.ccttwqjmja5e.us-west-2.redshift.amazonaws.com:5439/sample_data_dev
+  DbUsername:
+    Description: The username of the super user
+    Type: String
+    Default: awsuser
+  ErrorTopicName:
+    Type: String
+    Description: The name of the SNS topic
+    Default: reignite24-error-topic
+  EmailAddresses:
+    Type: CommaDelimitedList
+    Description: List of email addresses to subscribe to the SNS topic
+    Default: user@example.com,user2@example.com
+  S3BucketLocalName:
+    Type: String
+    Description: The name of the S3 bucket to create
+    Default: reignite24-local-266726630905-us-west-2
+  S3BucketNameGlobal:
+    Type: String
+    Description: The name of the S3 bucket to create
+    Default: reignite24-global-266726630905-us-west-2
+  ScriptPath:
+    Description: Script Path
+    Type: String
+    Default: scripts/
+  ResultPath:
+    Description: Result Path
+    Type: String
+    Default: result/
+  ErrorPath:
+    Description: Error Path
+    Type: String
+    Default: error/
+  ManifestPath:
+    Description: Manifest Path
+    Type: String
+    Default: manifest/
+
+
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Input Parameters
+        Parameters:
+          - RedshiftClusterEndpoint
+          - DbUsername
+          - ErrorTopicName
+          - EmailAddresses
+          - S3BucketLocalName
+          - S3BucketGlobalName
+          - ScriptPath
+          - ResultPath
+          - ErrorPath
+          - ManifestPath
+
+Resources:
+# create here three nested stacks
+  NestedStackS3andSNS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${S3BucketNameGlobal}/stacks/S3sndSNS.yaml'
+      Parameters:
+        S3BucketName: !Ref S3BucketNameLocal
+        EmailAddresses: !Ref EmailAddresses
+        ErrorTopicName: !Ref ErrorTopicName
+
+  NestedStackSF_Layer1:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${S3BucketNameGlobal}/stacks/SFL1Role.yaml'
+      Parameters:
+        RedshiftClusterEndpoint: !Ref RedshiftClusterEndpoint
+        DbUsername: !Ref DbUsername
+        S3BucketNameLocal: !GetAtt  NestedStackS3andSNS.Outputs.S3BucketName
+        ScriptPath: !Ref ScriptPath
+        ResultPath: !Ref ResultPath
+        ErrorPath: !Ref ErrorPath
+
+  NestedStackLambdas:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${S3BucketNameGlobal}/stacks/LambdasRoles.yaml'
+      Parameters:
+        RedshiftClusterEndpoint: !Ref RedshiftClusterEndpoint
+        DbUsername: !Ref DbUsername
+        S3BucketNameGlobal: !Ref S3BucketNameGlobal
+        S3BucketName: !GetAtt  NestedStackS3andSNS.Outputs.S3BucketName
+        ScriptPath: !Ref ScriptPath
+        ResultPath: !Ref ResultPath
+        ErrorPath: !Ref ErrorPath
+        ManifestPath: !Ref ManifestPath
+        SNSTopic: !GetAtt NestedStackS3andSNS.Outputs.ErrorTopicName
+
+  NestedStackSF_Layer2:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${S3BucketNameGlobal}/stacks/SFL2Role.yaml'
+      Parameters:
+        SFLayer1StateMachine: !GetAtt NestedStackSF_Layer1.Outputs.SFLayer1Name
+        S3BucketName: !GetAtt  NestedStackS3andSNS.Outputs.S3BucketName
+        ScriptPath: !Ref ScriptPath
+        ResultPath: !Ref ResultPath
+        ErrorPath: !Ref ErrorPath
+        LambdaWorkflowName: !GetAtt NestedStackLambdas.Outputs.LambdaWorkflowFunctionName
+
+  NestedStackSF_Layer3:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://s3.amazonaws.com/${S3BucketNameGlobal}/stacks/SFL3Role.yaml'
+      Parameters:
+        StateMachineLayer2: !GetAtt NestedStackSF_Layer2.Outputs.StateMachineLayer2Arn
+        S3BucketName: !GetAtt  NestedStackS3andSNS.Outputs.S3BucketName
+        ScriptPath: !Ref ScriptPath
+        ResultPath: !Ref ResultPath
+        ErrorPath: !Ref ErrorPath
+        LambdaCreateOutputName: !GetAtt NestedStackLambdas.Outputs.LambdaCreateOutputFunctionName
+        LambdaProcessResultsName: !GetAtt NestedStackLambdas.Outputs.LambdaProcessResultsFunctionName
+        SNSTopic: !GetAtt NestedStackS3andSNS.Outputs.ErrorTopicName
+

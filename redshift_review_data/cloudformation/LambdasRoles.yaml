@@ -1,0 +1,586 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nested Stack for Lambdas
+
+Parameters:
+  RedshiftClusterEndpoint:
+    Description: The endpoint of the evaluated Redshift Cluster.
+    Type: String
+    Default: redshift-cluster-1.ccttwqjmja5e.us-west-2.redshift.amazonaws.com:5439/sample_data_dev
+  DbUsername:
+    Description: The username of the super user
+    Type: String
+    Default: awsuser
+  ScriptPath:
+    Description: Script Path
+    Type: String
+    Default: scripts/
+  ResultPath:
+    Description: Result Path
+    Type: String
+    Default: result/
+  ErrorPath:
+    Description: Error Path
+    Type: String
+    Default: error/
+  ManifestPath:
+    Description: Manifest Path
+    Type: String
+    Default: manifest/
+  S3BucketName:
+    Description: The S3 bucket name 
+    Type: String
+    Default: scripts-logger-266726630905-us-west-2
+  S3BucketNameGlobal:
+    Description: The S3 bucket name 
+    Type: String
+    Default: response-logger-266726630905-us-west-2
+  StateMachineL3:
+    Type: String
+    Description: The state machine ARN
+    Default: arn:aws:states:us-west-2:266726630905:stateMachine:MyStateMachine-71tewtc75
+  SNSTopic:
+    Type: String
+    Description: SNS Topic
+    Default:  arn:aws:sns:us-west-2:266726630905:redshift_review_error_topic_standard
+  
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Input Parameters
+        Parameters:
+          - RedshiftClusterEndpoint
+          - DbUsername
+          - S3BucketName
+          - ScriptPath
+          - ResultPath
+          - ErrorPath
+          - ManifestPath
+          - S3BucketNameGlobal
+          - StateMachineL3
+          - SNSTopic
+
+
+Resources:
+
+
+  LambdaWorkflowRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: IAM Role for LambdaWorkflow
+      RoleName: !Sub LambdaWorkflowRole-${AWS::AccountId}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  LambdaCreateOutputRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: IAM Role for LambdaCreateOutput
+      RoleName: !Sub LambdaCreateOutputRole-${AWS::AccountId}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: lamrol-OutputAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource:
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}
+        - PolicyName: lamrol-XRayPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                Resource:
+                  - '*'
+
+  LambdaProcessResultsRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: IAM Role for LambdaProcessResults
+      RoleName: !Sub LambdaProcessResultsRole-${AWS::AccountId}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: lamrol-OutputAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:PutObject
+                Resource:
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ManifestPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ErrorPath}*
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ManifestPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}/${ResultPath}
+                  - !Sub arn:aws:s3:::${S3BucketName}
+        - PolicyName: lamrol-XRayPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                Resource:
+                  - '*'
+
+  LambdaInvokeStepFunctionRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: !Sub LambdaInvokeStepFunctionRole-${AWS::AccountId}
+      Description: IAM Role for lambda to execute the Step Function
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: LambdaInvokePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource:
+                  - !Ref StateMachineL3
+        - PolicyName: LambdaCloudFormationPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !Sub arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}
+                  - !Sub arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}
+                  - !Sub arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}/*
+                  - !Sub arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}/*
+
+  LambdaCopyScriptsRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: !Sub LambdaCopyScriptsRole-${AWS::AccountId}
+      Description: IAM Role for lambda to copy scripts
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: LambdaCloudFormationPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !Sub arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}
+                  - !Sub arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}
+                  - !Sub arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}/*
+                  - !Sub arn:aws:s3:::cloudformation-waitcondition-${AWS::Region}/*
+
+  LambdaWorkflow:
+    Type: AWS::Lambda::Function
+    Properties: 
+      FunctionName: !Sub LambdaWorkflow-${AWS::AccountId}
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Role: !GetAtt LambdaWorkflowRole.Arn
+      Timeout: 60
+      Runtime: python3.11
+      Architectures:
+        - x86_64
+      Layers:
+        - arn:aws:lambda:us-west-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:71
+      Code:
+        ZipFile: |
+          import boto3
+          import traceback
+          import json
+          from uuid import uuid4
+          def lambda_handler(event, context):
+              # TODO implement
+              print(event)
+              state = json.loads(event.get("input").get("Input"))
+              bucket = state.get("S3BucketName")
+              query = state.get("Query")
+              workflow = state.get("Workflow")
+              script = query.get("Script")
+              status = event.get("input").get("Status")
+              uuid_str = str(uuid4())
+              last_string = uuid_str.split('-')[-1]
+              print(script)
+              print(status)
+              next = 0
+              for step in workflow:
+                  print(step)
+                  if next == 1:
+                      next_query = workflow[step]
+                      return {
+                              'statusCode': 200,
+                              'body': {
+                                  "QueryList": workflow,
+                                  "Query": next_query,
+                                  "S3BucketName": bucket
+                              },
+                              'continue': True
+                          }
+                  if step == script:
+                      workflow[step]["Status"] = status
+                      next = 1
+              return {
+                  'statusCode': 200,
+                  'body': {
+                      "QueryList": workflow,
+                      "Query": {
+                          "OutputLocation": f"manifest/workflow-{last_string}.manifest"
+                      },
+                      "S3BucketName": bucket
+                  },
+                  'continue': False
+              }
+
+  LambdaCreateOutput:
+    Type: AWS::Lambda::Function
+    Properties: 
+      FunctionName: !Sub LambdaCreateOutput-${AWS::AccountId}
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Role: !GetAtt LambdaCreateOutputRole.Arn
+      Timeout: 60
+      Runtime: python3.10
+      Architectures:
+        - x86_64
+      Layers:
+        - arn:aws:lambda:us-west-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:71
+      Environment:
+        Variables: 
+          BUCKET_NAME: ${S3BucketName}
+          RESULT_PREFIX: ${ResultPath}
+      Code:
+        ZipFile: |
+          import json
+          import io
+          import csv
+          import boto3
+          import os
+          s3 = boto3.client('s3')
+          def create_csv(json_result):
+              column_metadata = json_result['ColumnMetadata']
+              column_names = [column['Name'] for column in column_metadata]
+              records = json_result['Records']
+              # Write the CSV data to an in-memory buffer
+              csv_buffer = io.StringIO()
+              writer = csv.writer(csv_buffer)
+              writer.writerow(column_names)
+              if  records != []:
+                  for record in records:
+                      row = []
+                      for value in record:
+                          if 'StringValue' in value:
+                              row.append(value['StringValue'])
+                          elif 'LongValue' in value:
+                              row.append(str(value['LongValue']))
+                      writer.writerow(row)
+              return csv_buffer.getvalue()
+          def lambda_handler(event, context):
+              # TODO implement
+              print(event)
+              result_bucket = os.environ["BUCKET_NAME"]
+              result_prefix = os.environ["RESULT_PREFIX"]
+              try:
+                  list = s3.list_objects_v2(Bucket=result_bucket, Prefix=result_prefix)
+                  for obj in list.get('Contents', []):
+                      if "json" in obj["Key"]:
+                          #print(obj['Key'])#read all the results
+                          response = s3.get_object(Bucket=result_bucket, Key=obj['Key'])
+                          intm = json.loads(response['Body'].read().decode('utf-8'))
+                          csv_buf = create_csv(intm)
+                          result = s3.put_object(Bucket=result_bucket, Key=obj['Key'].replace("json","csv"), Body=csv_buf)
+                  return {
+                          'statusCode': 200,
+                          'message': 'CSV files created'
+                          }
+              except Exception as e:
+                  print(repr(e))
+                  return {
+                          'statusCode': 400,
+                          'message': 'problem in processing CSV files '
+                          }
+
+  LambdaProcessResults:
+    Type: AWS::Lambda::Function
+    Properties: 
+      FunctionName: !Sub LambdaProcessResults-${AWS::AccountId}
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Role: !GetAtt LambdaProcessResultsRole.Arn
+      Timeout: 60
+      Runtime: python3.10
+      Architectures:
+        - x86_64
+      Layers:
+        - arn:aws:lambda:us-west-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:71
+      Environment:
+        Variables: 
+          BUCKET_NAME: ${S3BucketName}
+          RESULT_PREFIX: ${ManifestPath}
+      Code:
+        ZipFile: |
+          import json
+          import io
+          import os
+          import csv
+          import boto3
+          bucket = os.environ["BUCKET_NAME"]
+          manifest_prefix = os.environ["MANIFEST_PREFIX"]
+          s3 = boto3.client("s3")
+          def manifest_list():
+              try:
+                  list = s3.list_objects_v2(Bucket=bucket, Prefix=manifest_prefix)
+                  manifest_list = []
+                  for obj in list.get('Contents', []):
+                      if "manifest" in obj["Key"]:
+                          manifest_list.append(obj)
+                  return manifest_list
+              except Exception as e:
+              print (repr(e))
+              return []
+          def lambda_handler(event, context):
+              print(event)
+              bucket = event.get("S3BucketName")
+              workflow = json.loads(event.get("input").get("Output")).get("QueryList")
+              #status = event.get("input").get("Status")
+              # check how many workflow.manifests are
+              lenmf = len(manifest_list())
+              print(lenmf)
+              if lenmf >= 3 or lenmf == 0:
+              endstate = True
+              else:
+              endstate = False
+              next_wf = {}
+              for step in workflow:
+              if workflow[step]["Status"] == "SUCCEEDED":
+                  pass
+              else:
+                  next_wf[step] = workflow[step]
+                  query = workflow[step]
+              if next_wf != {}:
+              if endstate == False:
+                  return {
+                      'statusCode': 200,
+                      'body': {
+                          "QueryList": next_wf,
+                          "Query": query,
+                          "S3BucketName": bucket
+                      },
+                      'rerun': True,
+                      'succedded': False
+                  }
+              else:
+                  report={}
+                  for step in next_wf:
+                  report[step] = { "Status" : next_wf[step]["Status"]  }
+                  return {
+                      'statusCode': 400,
+                      'error': {
+                          'error_queries': report,
+                          'error_message' : "There is a persistant error in executing the listed queries. Please contact the TAM team",
+                          },
+                      'rerun': False,
+                      'succedded': False
+                  }
+              else:
+              return {}
+                      'statusCode': 200,
+                      'rerun': False,
+                      'succedded': True
+                  }
+
+  LambdaCopyScriptsFunction:
+    Type: AWS::Lambda::Function
+    Properties: 
+      FunctionName: !Sub LambdaCopyScriptsFunction-${AWS::AccountId}
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Runtime: python3.10
+      Architectures:
+        - x86_64
+      Layers:
+        - arn:aws:lambda:us-west-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:71
+      Role: !GetAtt LambdaCopyScriptsRole.Arn
+      Timeout: 600
+      Environment:
+        Variables: 
+          SOURCE_BUCKET: !Ref S3BucketName
+          SOURCE_PREFIX: !Ref ScriptPath
+          DESTINATION_BUCKET: !Ref S3BucketNameGlobal
+          DESTINATION_PREFIX: !Ref ScriptPath
+      Code:
+        ZipFile: |
+          import boto3
+          import traceback
+          import json
+          import os
+          import cfnresponse
+          def handler(event, context):
+              source_bucket = os.environ['SOURCE_BUCKET']
+              source_prefix = os.environ['SOURCE_PREFIX']
+              destination_bucket = os.environ['DESTINATION_BUCKET']
+              destination_prefix = os.environ['DESTINATION_PREFIX']
+              print(event)
+              s3 = boto3.client('s3')
+              response ={}
+              if event['RequestType'] != 'Delete':
+                  try:
+                      #source_bucket = event['ResourceProperties'].get('S3Global')
+                      #source_prefix = event['ResourceProperties'].get('ScriptPath')+'/'
+                      #destination_bucket = event['ResourceProperties'].get('S3Local')
+                      #destination_prefix = event['ResourceProperties'].get('ScriptPath')+'/'
+                      response = s3.list_objects_v2(Bucket=source_bucket, Prefix=source_prefix)
+                      for obj in response.get('Contents', []):
+                          copy_source = {'Bucket': source_bucket, 'Key': obj['Key']}
+                          new_key = obj['Key'].replace(source_prefix, destination_prefix, 1)
+                          response = s3.copy_object(CopySource=copy_source, Bucket=destination_bucket, Key=new_key)
+                  except:
+                      print(traceback.format_exc())
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                      raise
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+
+  LambdaInvokeStepFunction:
+    Type: AWS::Lambda::Function
+    Properties: 
+      FunctionName: !Sub LambdaInvokeStepFunctionRole-${AWS::AccountId}
+      Description: Lambda to execute the step function
+      Handler: index.handler
+      Runtime: python3.10
+      Architectures:
+        - x86_64
+      Layers:
+        - arn:aws:lambda:us-west-2:017000801446:layer:AWSLambdaPowertoolsPythonV2:71
+      Role: !GetAtt LambdaInvokeStepFunctionRole.Arn
+      Timeout: 600
+      Environment:
+        Variables: 
+          STATE_MACHINE_ARN: !Ref StateMachineL3
+          BUCKET_NAME: !Ref S3BucketName
+          SCRIPT_PATH: !Ref ScriptPath
+          RESULT_PATH: !Ref ResultPath
+          ERROR_PATH: !Ref ErrorPath
+      Code:
+        ZipFile: |
+          import boto3
+          import traceback
+          import json
+          from aws_lambda_powertools import Logger
+          #from aws_lambda_powertools import Tracer
+          #from aws_lambda_powertools import Metrics
+          logger = Logger()
+          #metrics = Metrics(namespace="PowertoolsSample")
+          import cfnresponse
+          def handler(event, context):
+              logger.info(event)
+              step_function_client = boto3.client('stepfunctions')
+              res = {}
+              if event['RequestType'] != 'Delete':
+                  try:
+                      step_function_input = {"comment": "Execute ETL Workflow for Redshift"}
+                      response = step_function_client.start_execution(stateMachineArn=event['ResourceProperties'].get('StepFunctionArn'),
+                                                                      input=json.dumps(step_function_input)
+                                                                      )
+                      print(response)
+                  except:
+                      print(traceback.format_exc())
+                      cfnresponse.send(event, context, cfnresponse.FAILED, input)
+                      raise
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, res)
+
+
+Outputs: 
+    RedshiftClusterReference:
+      Description: "The Endpoint of the Redshift Cluster being referenced."
+      Value: !Ref RedshiftClusterEndpoint
+
+    LambdaCopyScriptsFunctionName:
+      Description: The FunctionName of the lambda that copy scripts
+      Value: !GetAtt LambdaCopyScriptsFunction.FunctionName
+
+    LambdaInvokeStepFunctionName:
+      Description: The FunctionName of the lambda that invokes ssf
+      Value: !GetAtt LambdaInvokeStepFunction.FunctionName
+
+    LambdaWorkflowFunctionName:
+      Description: The FunctionName of the lambda that invokes ssf
+      Value: !GetAtt LambdaWorkflow.FunctionName
+
+    LambdaCreateOutputFunctionName:
+      Description: The FunctionName of the lambda that invokes ssf
+      Value: !GetAtt LambdaCreateOutput.FunctionName
+
+    LambdaProcessResultsFunctionName:
+      Description: The FunctionName of the lambda that invokes ssf
+      Value: !GetAtt LambdaProcessResults.FunctionName

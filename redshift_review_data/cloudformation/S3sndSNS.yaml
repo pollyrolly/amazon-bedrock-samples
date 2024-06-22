@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Nested Stack for S3 bucket and SNS topic
+
+Parameters:
+  ErrorTopicName:
+    Type: String
+    Description: The name of the SNS topic
+    Default: reignite24-error-topic
+  EmailAddresses:
+    Type: CommaDelimitedList
+    Description: List of email addresses to subscribe to the SNS topic
+    Default: user@example.com,user2@example.com
+  S3BucketName:
+    Type: String
+    Description: The name of the S3 bucket to create
+    Default: reignite24-local
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Input Parameters
+        Parameters:
+          - ErrorTopicName
+          - EmailAddresses
+          - S3BucketName
+
+
+Resources:
+  ErrorSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${ErrorTopicName}-${AWS::AccountId}'
+      Subscription:
+        - Protocol: email
+          Endpoint: ${EmailAddresses}
+
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: 
+              AWS: '*'
+            Action: 'sns:Publish'
+            Resource: !GetAtt ErrorSNSTopic.Arn 
+      Topics:
+        - !Ref ErrorTopicName
+
+  S3BucketLocal:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Sub '${S3BucketName}-${AWS::AccountId}-${AWS::Region}'
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+Outputs:
+  ErrorTopicName:
+    Description: The ARN of the SNS topic
+    Value: !GetAtt  ErrorSNSTopic.TopicName
+  S3BucketName:
+    Description: The name of the S3 bucket
+    Value: !GetAtt S3BucketLocal.BucketName
+

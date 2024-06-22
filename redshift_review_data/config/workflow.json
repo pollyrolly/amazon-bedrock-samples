@@ -1,156 +1,26 @@
-{
-  "S3BucketName": "scripts-logger-266726630905-us-west-2",
-  "Query": {
-    "ScriptName": "scripts/rpr_NodeDetails.sql",
-    "OutputLocation": "result/NodeDetails.json",
-    "ErrorLocation": "error/",
-    "TimeThreshold": 600,
-    "Status": "INITIAL",
-    "Script": "NodeDetails"
-  },
-  "QueryList": {
-    "NodeDetails": {
-      "ScriptName": "scripts/rpr_NodeDetails.sql",
-      "OutputLocation": "result/NodeDetails.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "NodeDetails"
-    },
-    "QueueHealth": {
-      "ScriptName": "scripts/rpr_QueueHealth.sql",
-      "OutputLocation": "result/QueueHealth.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "QueueHealth"
-    },
-    "AlterTableRecommendation": {
-      "ScriptName": "scripts/rpr_AlterTableRecommendation.sql",
-      "OutputLocation": "result/AlterTableRecommendation.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "AlterTableRecommendation"
-    },
-    "SpectrumPerformance": {
-      "ScriptName": "scripts/rpr_SpectrumPerformance.sql",
-      "OutputLocation": "result/SpectrumPerformance.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "SpectrumPerformance"
-    },
-    "ATOWorkerActions": {
-      "ScriptName": "scripts/rpr_ATOWorkerActions.sql",
-      "OutputLocation": "result/ATOWorkerActions.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "ATOWorkerActions"
-    },
-    "ConcurrencyScalingUsage": {
-      "ScriptName": "scripts/rpr_ConcurrencyScalingUsage.sql",
-      "OutputLocation": "result/ConcurrencyScalingUsage.json",
-      "TimeThreshold": 600,
-      "Status": "INITIAL",
-      "Script": "ConcurrencyScalingUsage"
-    },
-    "CopyPerformance": {
-      "ScriptName": "scripts/rpr_CopyPerformance.sql",
-      "OutputLocation": "result/CopyPerformance.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "CopyPerformance"
-    },
-    "DataShareConsumerUsage": {
-      "ScriptName": "scripts/rpr_DataShareConsumerUsage.sql",
-      "OutputLocation": "result/DataShareConsumerUsage.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "DataShareConsumerUsage"
-    },
-    "DataShareProducerObject": {
-      "ScriptName": "scripts/rpr_DataShareProducerObject.sql",
-      "OutputLocation": "result/DataShareProducerObject.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "DataShareProducerObject"
-    },
-    "MaterializedView": {
-      "ScriptName": "scripts/rpr_MaterializedView.sql",
-      "OutputLocation": "result/MaterializedView.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "MaterializedView"
-    },
-    "TableAlerts": {
-      "ScriptName": "scripts/rpr_TableAlerts.sql",
-      "OutputLocation": "result/TableAlerts.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "TableAlerts"
-    },
-    "TableInfo": {
-      "ScriptName": "scripts/rpr_TableInfo.sql",
-      "OutputLocation": "result/TableInfo.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "TableInfo"
-    },
-    "Top50QueriesByDiskSpill": {
-      "ScriptName": "scripts/rpr_Top50QueriesByDiskSpill.sql",
-      "OutputLocation": "result/Top50QueriesByDiskSpill.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "Top50QueriesByDiskSpill"
-    },
-    "Top50QueriesByRunTime": {
-      "ScriptName": "scripts/rpr_Top50QueriesByRunTime.sql",
-      "OutputLocation": "result/Top50QueriesByRunTime.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "Top50QueriesByRunTime"
-    },
-    "UsagePattern": {
-      "ScriptName": "scripts/rpr_UsagePattern.sql",
-      "OutputLocation": "result/UsagePattern.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "UsagePattern"
-    },
-    "WLMandCommit": {
-      "ScriptName": "scripts/rpr_WLMandCommit.sql",
-      "OutputLocation": "result/WLMandCommit.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "WLMandCommit"
-    },
-    "WLMConfig": {
-      "ScriptName": "scripts/rpr_WLMConfig.sql",
-      "OutputLocation": "result/WLMConfig.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "WLMConfig"
-    },
-    "WorkloadEvaluation": {
-      "ScriptName": "scripts/rpr_WorkloadEvaluation.sql",
-      "OutputLocation": "result/WorkloadEvaluation.json",
-      "TimeThreshold": 600,
-      "ErrorLocation": "error/",
-      "Status": "INITIAL",
-      "Script": "WorkloadEvaluation"
-    }
-  }
+{ 
+    "all_serial" : ["NodeDetails,QueueHealth,AlterTableRecommendation"+
+                "SpectrumPerformance,ATOWorkerActions,ConcurrencyScalingUsage"+
+                "CopyPerformance,DataShareConsumerUsage,DataShareProducerObject"+
+                "MaterializedView,TableAlerts,TableInfo"+
+                "Top50QueriesByDiskSpill,Top50QueriesByRunTime,UsagePattern"+
+                "WLMandCommi,WLMConfig,WorkloadEvaluation"],
+    "all_parallel" : [["NodeDetails"],["QueueHealth"],["AlterTableRecommendation"],
+                ["SpectrumPerformance"],["ATOWorkerActions"],["ConcurrencyScalingUsage"],
+                ["CopyPerformance"],["DataShareConsumerUsage"],["DataShareProducerObject"],
+                ["MaterializedView"],["TableAlerts"],["TableInfo"],
+                ["Top50QueriesByDiskSpill"],["Top50QueriesByRunTime"],["UsagePattern"],
+                ["WLMandCommi"],["WLMConfig"],["WorkloadEvaluation"]],
+    "parallel_serial_1" : [["NodeDetails,QueueHealth,AlterTableRecommendation"],
+                        ["SpectrumPerformance,ATOWorkerActions,ConcurrencyScalingUsage"],
+                        ["CopyPerformance,DataShareConsumerUsage,DataShareProducerObject"],
+                        ["MaterializedView,TableAlerts,TableInfo"],
+                        ["Top50QueriesByDiskSpill,Top50QueriesByRunTime,UsagePattern"],
+                        ["WLMandCommi,WLMConfig,WorkloadEvaluation"]],
+    "parallel_serial_2" : [[["NodeDetails"],["QueueHealth"],["AlterTableRecommendation"]],
+                        [["SpectrumPerformance"],["ATOWorkerActions"],["ConcurrencyScalingUsage"]],
+                        [["CopyPerformance"],["DataShareConsumerUsage"],["DataShareProducerObject"]],
+                        [["MaterializedView"],["TableAlerts"],["TableInfo"]],
+                        [["Top50QueriesByDiskSpill"],["Top50QueriesByRunTime"],["UsagePattern"]],
+                        [["WLMandCommi"],["WLMConfig"],["WorkloadEvaluation"]]]
 }
