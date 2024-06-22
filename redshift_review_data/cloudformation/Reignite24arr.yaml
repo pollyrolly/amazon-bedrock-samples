@@ -43,8 +43,6 @@ Parameters:
     Default: manifest/
 
 
-
-
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:

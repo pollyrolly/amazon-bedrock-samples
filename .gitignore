@@ -14,8 +14,7 @@ node_modules/
 
 # Ignore log files and databases
 *.log
-*.sql
-*.sqlite
+
 
 # Ignore OS generated files
 .DS_Store
